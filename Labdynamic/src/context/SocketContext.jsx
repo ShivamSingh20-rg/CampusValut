@@ -7,6 +7,7 @@ import { BACKEND_URL } from '../pages/Api';
 const SOCKET_URL = BACKEND_URL ? BACKEND_URL.replace(/\/api\/?$/, '') : 'http://localhost:5000';
 
 const getToken = () => localStorage.getItem('labToken') || localStorage.getItem('token');
+
 const getStoredUser = () => {
   try {
     return JSON.parse(localStorage.getItem('labUser') || localStorage.getItem('user') || '{}');
@@ -27,12 +28,13 @@ export const SocketProvider = ({ children }) => {
   const currentUser = user || storedUser;
   const activeUserId = currentUser?._id || currentUser?.id;
 
-  // Use a ref for currentUser to avoid re-triggering the connection effect on object reference changes
+  // Track latest user object in a ref to avoid socket reconnect loops on reference changes
   const userRef = useRef(currentUser);
   useEffect(() => {
     userRef.current = currentUser;
   }, [currentUser]);
 
+  // Fetch initial notifications from REST endpoint
   const fetchNotifications = useCallback(async () => {
     const token = getToken();
     if (!token || !activeUserId) return;
@@ -45,7 +47,7 @@ export const SocketProvider = ({ children }) => {
       if (res.data?.success) {
         const list = res.data.notifications || [];
         setNotifications(list);
-        setUnreadCount(list.filter((n) => !n.read).length);
+        setUnreadCount(list.filter((n) => !n.read && !n.isRead).length);
       }
     } catch (err) {
       console.error('Failed to fetch initial notifications:', err);
@@ -81,12 +83,11 @@ export const SocketProvider = ({ children }) => {
       console.error('❌ Socket Connection Error:', err.message);
     });
 
-    // Helper to safely deduplicate notifications by ID before inserting
+    // Deduplicate incoming websocket payloads before updating state
     const handleIncomingNotification = (rawNotif, customEventName = null) => {
       const notifId = String(rawNotif._id || rawNotif.bookingId || rawNotif.id || `notif-${Date.now()}`);
 
       setNotifications((prev) => {
-        // 🟢 Prevent duplicate entries if the notification ID is already present
         const exists = prev.some((n) => String(n._id || n.id) === notifId);
         if (exists) return prev;
 
@@ -109,7 +110,7 @@ export const SocketProvider = ({ children }) => {
       }
     };
 
-    // Listeners
+    // Socket Event Listeners
     newSocket.on('notification_received', (data) => {
       handleIncomingNotification(data);
     });
@@ -161,25 +162,27 @@ export const SocketProvider = ({ children }) => {
       newSocket.off('slotUpdated');
       newSocket.disconnect();
     };
-  }, [activeUserId, fetchNotifications]); // 🟢 Removed currentUser from dependencies
+  }, [activeUserId, fetchNotifications]);
 
   const markAsRead = async (id = null) => {
     const token = getToken();
 
     if (id) {
+      // Optimistic UI update
+      setNotifications((prev) =>
+        prev.map((n) => (String(n._id || n.id) === String(id) ? { ...n, read: true, isRead: true } : n))
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+
       try {
         await axios.put(
           `${BACKEND_URL}/notifications/${id}/read`,
           {},
           { headers: { Authorization: `Bearer ${token}` } }
         );
-
-        setNotifications((prev) =>
-          prev.map((n) => (n._id === id ? { ...n, read: true } : n))
-        );
-        setUnreadCount((prev) => Math.max(0, prev - 1));
       } catch (err) {
         console.error('Failed to mark notification as read:', err);
+        fetchNotifications();
       }
     } else {
       setUnreadCount(0);
@@ -191,7 +194,7 @@ export const SocketProvider = ({ children }) => {
     if (!token) return;
 
     setUnreadCount(0);
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true, isRead: true })));
 
     try {
       await axios.put(

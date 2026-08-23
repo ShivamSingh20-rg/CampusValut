@@ -12,6 +12,7 @@ const { initCronJobs } = require('./config/cronService');
 const userRoutes = require('./Routes/Admin.user.route');
 const notificationRoutes = require('./Routes/notification.route');
 const bookingRoutes = require('./Routes/booking.route');
+const LabbookingRoutes = require('./Routes/Labbooking.route')
 const facultyRoutes = require('./Routes/Faculty.route');
 const adminBookingRoutes = require('./Routes/Admin.booking.route');
 const app = express();
@@ -64,6 +65,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/faculty', facultyRoutes);
 app.use('/api/bookings/admin', adminBookingRoutes);
+app.use('/api/lab-booking',LabbookingRoutes)
 // Root Health Check
 app.get('/', (req, res) => {
   res.send('LabDynamix API Engine is running...');

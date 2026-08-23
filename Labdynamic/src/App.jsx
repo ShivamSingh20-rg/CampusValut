@@ -15,14 +15,21 @@ import FacultyDashboard from "./Faculty/pages/FacultyDash";
 import Loginpage from "./pages/Loginpage";
 import NotificationBell from "./components/Notification";
 import Lab from "./Admin/pages/Lab";
+import AllBookings from "./Admin/pages/AllBookings"
 import FacultyApprovedBookings from "./Faculty/pages/facultyapproved";
 import ResourceDetails from "./pages/ResourceDetailpage";
 import FacultyLab from "./Faculty/pages/FacultyLabs";
 import BookingDetail from "./pages/BookingDetail";
+import AdminFacultyRequest from "./Admin/pages/FacultyRequest"
 import StudentRequest from "./Admin/pages/StudentRequest";
 import MyBookings from "./pages/MyBooking";
 import FacultyNOtifications from "./Faculty/pages/Notification";
 import StudentBookingRequest from "./Faculty/pages/Bookingrequest";
+import Labbooking from "./Faculty/pages/Labbooking"
+import Labschedule from "./Faculty/pages/Labschedule"
+import BookinglabDetail from "./Faculty/pages/BookinglabDetail"
+import ScheduleDetail from './Faculty/pages/Scheduledetail'
+import FacultyLabBooking from "./Faculty/pages/MyLabbooking"
 import { useAuth } from './context/Authcontext'; 
 
 export default function App() {
@@ -107,13 +114,36 @@ export default function App() {
             <Route 
               path="/faculty/requests" 
               element={isFaculty ? <StudentBookingRequest user={user} /> : <Navigate to="/" replace />} />
-<Route path="/faculty/approved" 
+            <Route path="/faculty/approved" 
               element={isFaculty ? <FacultyApprovedBookings user={user} /> : <Navigate to="/" replace />} 
             />
             <Route 
               path="/faculty/notifications" 
               element={isFaculty ? <FacultyNOtifications user={user} /> : <Navigate to="/" replace />} 
             />
+            
+            <Route 
+              path="/faculty/book-lab" 
+              element={isFaculty ? <Labbooking user={user} /> : <Navigate to="/" replace />} 
+            />
+            <Route 
+              path="/faculty/calendar" 
+              element={isFaculty ? <Labschedule user={user} /> : <Navigate to="/" replace />} 
+            />
+            <Route 
+              path="/faculty/:id/bookinglabdetail" 
+              element={isFaculty ? <BookinglabDetail user={user} /> : <Navigate to="/" replace />} 
+            />
+            <Route 
+              path="/faculty/my-booking" 
+              element={isFaculty ? <FacultyLabBooking user={user} /> : <Navigate to="/" replace />} 
+            />
+            <Route 
+              path="/faculty/Shedule-detail/:id" 
+              element={isFaculty ? <ScheduleDetail user={user} /> : <Navigate to="/" replace />} 
+            />
+            
+            
             {/* Admin Protected Routes */}
             <Route 
               path="/admin/dashboard" 
@@ -134,6 +164,14 @@ export default function App() {
             <Route 
               path="/admin/requests" 
               element={isAdmin ? <StudentRequest user={user} /> : <Navigate to="/" replace />} 
+            />
+            <Route 
+              path="/admin/faculty-requests" 
+              element={isAdmin ? < AdminFacultyRequest  user={user} /> : <Navigate to="/" replace />} 
+            />
+            <Route 
+              path="/admin/all-bookings" 
+              element={isAdmin ? < AllBookings   user={user} /> : <Navigate to="/" replace />} 
             />
 
             {/* Catch-all Fallback */}

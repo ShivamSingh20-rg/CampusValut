@@ -52,6 +52,7 @@ exports.getLabs = async (req, res) => {
 // @route   GET /api/labs/:id
 exports.getLabById = async (req, res) => {
   try {
+    console.log('lab id is',req.params.id);
     const lab = await Lab.findById(req.params.id);
     if (!lab) return res.status(404).json({ message: 'Lab not found' });
     res.status(200).json(lab);

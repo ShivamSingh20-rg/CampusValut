@@ -1,13 +1,34 @@
 const Booking = require('../models/Booking'); // Adjust path to your Booking model
-
+const LabBooking = require('../models/Labbooking')
 // @desc    Get all student requests (Admin only)
 // @route   GET /api/bookings/admin/all
 // @access  Private/Admin
 const getAllBookings = async (req, res) => {
   try {
     const bookings = await Booking.find()
-      .populate('user', 'name email department rollNumber') // Populates student details
+      .populate('user', 'name email department role') // Populates student details
       .populate('resource', 'name category location')        // Populates resource details
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: bookings.length,
+      bookings,
+    });
+  } catch (error) {
+    console.error('Error fetching all bookings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server Error: Failed to fetch student requests.',
+      error: error.message,
+    });
+  }
+};
+const getAllLabBookings = async (req, res) => {
+  try {
+    const bookings = await LabBooking.find()
+      .populate('user', 'name email department role') 
+      .populate('labId' )        
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -90,4 +111,5 @@ module.exports = {
   // ... your existing controller exports
   getAllBookings,
   updateBookingStatus,
+  getAllLabBookings
 };

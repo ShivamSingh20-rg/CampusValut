@@ -16,13 +16,13 @@ export default function FacultySidebar({ user, handleLogout }) {
       title: 'MANAGEMENT',
       items: [
         { path: '/faculty/my-labs', label: 'My Labs', icon: '📊' },
-        { path: '/faculty/resources', label: 'My Bookings', icon: '📅' },
+        { path: '/faculty/my-booking', label: 'My Bookings', icon: '📅' },
       ],
     },
     {
       title: 'BOOKINGS',
       items: [
-        { path: '/faculty/book-lab', label: 'Book Lab/Auditorium', icon: '🔷' },
+        { path: '/faculty/book-lab', label: 'Book Lab', icon: '🔷' },
         { path: '/faculty/requests', label: 'Booking Requests', icon: '📋' },
         { path: '/faculty/approved', label: 'Approved Bookings', icon: '📅' },
         { path: '/faculty/calendar', label: 'Lab Schedule', icon: '📆' },

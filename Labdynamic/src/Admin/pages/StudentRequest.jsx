@@ -35,7 +35,7 @@ const AdminBookings = () => {
       }
 
        
-      const response = await fetch(`${BACKEND_URL}/bookings/admin/all-bookings`, {
+      const response = await fetch(`${BACKEND_URL}/bookings/admin/all`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,

@@ -23,8 +23,8 @@ export default function AdminSidebar({ user, handleLogout }) {
     {
       title: 'BOOKINGS',
       items: [
-        { path: '/admin/bookings', label: 'All Bookings', icon: '📘' },
-        { path: '/admin/faculty-bookings', label: 'Faculty Requests', icon: '🚀' },
+        { path: '/admin/all-bookings', label: 'All Bookings', icon: '📘' },
+        { path: '/admin/faculty-requests', label: 'Faculty Requests', icon: '🚀' },
         { path: '/admin/requests', label: 'Student Requests', icon: '🚀' },
         
       ],

@@ -10,13 +10,17 @@ export default function FacultyDashboard() {
 
   // Separate states for raw and UI data
   const [pendingRequests, setPendingRequests] = useState([]);
-  const [rawPendingBookings, setRawPendingBookings] = useState([]);
+  const [, setRawPendingBookings] = useState([]);
 
-  const [approvedBookings, setApprovedBookings] = useState([]);
-  const [rawApprovedBookings, setRawApprovedBookings] = useState([]);
+  const [, setApprovedBookings] = useState([]);
+  const [, setRawApprovedBookings] = useState([]);
 
-  const [resourcesList, setResourcesList] = useState([]);
+  const [, setResourcesList] = useState([]);
   
+  // Dynamic State for Faculty's Personal Upcoming Bookings
+  const [upcomingBookings, setUpcomingBookings] = useState([]);
+  const [loadingUpcoming, setLoadingUpcoming] = useState(true);
+
   const [stats, setStats] = useState({
     pending: 0,
     approved: 0,
@@ -25,18 +29,10 @@ export default function FacultyDashboard() {
   });
 
   const [loadingPending, setLoadingPending] = useState(true);
-  const [loadingApproved, setLoadingApproved] = useState(true);
-  const [loadingResources, setLoadingResources] = useState(true);
-
-  // Static upcoming bookings fallback
-  const [upcomingBookings] = useState([
-    { lab: 'Electronics Lab', date: '12 Aug', time: '10-12', status: 'Approved' },
-    { lab: 'Computer Lab', date: '14 Aug', time: '02-04', status: 'Pending' },
-  ]);
 
   const getToken = () => localStorage.getItem('token') || localStorage.getItem('labToken');
 
-  // 1. Fetch Pending Bookings
+  // 1. Fetch Pending Requests
   const fetchPendingBookings = async () => {
     try {
       const token = getToken();
@@ -72,7 +68,7 @@ export default function FacultyDashboard() {
     }
   };
 
-  // 2. Fetch Approved Bookings
+  // 2. Fetch Approved Requests
   const fetchApprovedBookings = async () => {
     try {
       const token = getToken();
@@ -103,8 +99,6 @@ export default function FacultyDashboard() {
       }
     } catch (err) {
       console.warn('Failed to fetch approved bookings:', err.message);
-    } finally {
-      setLoadingApproved(false);
     }
   };
 
@@ -123,19 +117,44 @@ export default function FacultyDashboard() {
       }
     } catch (err) {
       console.warn('Failed to fetch resources:', err.message);
-    } finally {
-      setLoadingResources(false);
     }
   };
 
-  // Trigger API calls independently on mount
+  // 4. Fetch Real Faculty Personal Upcoming Bookings
+  const fetchUpcomingBookings = async () => {
+    setLoadingUpcoming(true);
+    try {
+      const token = getToken();
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const response = await axios.get(`${BACKEND_URL}/lab-booking/my-bookings`, { headers });
+      const myBookings = response.data?.bookings || response.data || [];
+
+      const formattedUpcoming = myBookings.map((item) => ({
+        id: item._id,
+        lab: item.labId?.name || item.labName || 'Laboratory',
+        date: item.date || item.bookingDate || item.slotDate || 'N/A',
+        time: item.startTime ? `${item.startTime} - ${item.endTime}` : (item.timeSlot || item.slot || 'N/A'),
+        status: (item.status || 'PENDING').toUpperCase(),
+      }));
+
+      setUpcomingBookings(formattedUpcoming);
+    } catch (err) {
+      console.warn('Failed to fetch upcoming bookings:', err.message);
+    } finally {
+      setLoadingUpcoming(false);
+    }
+  };
+
+  // Initial Data Sync
   useEffect(() => {
     fetchPendingBookings();
     fetchApprovedBookings();
     fetchResources();
+    fetchUpcomingBookings();
   }, []);
 
-  // Real-time Socket listener
+  // Socket Listener
   useEffect(() => {
     if (!socket) return;
 
@@ -165,7 +184,7 @@ export default function FacultyDashboard() {
     return () => socket.off('newBookingRequest', handleNewBooking);
   }, [socket]);
 
-  // Handle Approve / Reject Actions using PATCH /faculty/respond/:bookingId
+  // Handle Approve / Reject Actions
   const handleAction = async (requestId, actionType) => {
     try {
       const token = getToken();
@@ -180,7 +199,7 @@ export default function FacultyDashboard() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
     } catch (err) {
-      console.warn('API action call failed, updating UI locally anyway:', err.message);
+      console.warn('API action call failed:', err.message);
     } finally {
       setPendingRequests((prev) => {
         const filtered = prev.filter((item) => item.id !== requestId);
@@ -205,7 +224,7 @@ export default function FacultyDashboard() {
       {/* Header Section */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          👋 Welcome, {user?.name || 'Dr. Priya'}
+          👋 Welcome, {user?.name || 'Faculty Member'}
         </h1>
         <p className="text-slate-400 text-sm mt-1">Here's your lab activity for today.</p>
       </div>
@@ -291,25 +310,46 @@ export default function FacultyDashboard() {
         </div>
       </div>
 
-      {/* Section 2: My Upcoming Bookings */}
+      {/* Section 2: Real Upcoming Bookings */}
       <div className="mb-6">
         <h2 className="text-xs font-bold tracking-wider text-slate-400 uppercase mb-3 flex items-center gap-2">
           📝 My Upcoming Bookings
         </h2>
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800/60 text-xs">
-          {upcomingBookings.map((item, idx) => (
-            <div key={idx} className="flex items-center justify-between p-3.5 px-4 hover:bg-slate-900/80 transition-colors">
-              <span className="font-medium text-slate-200">{item.lab}</span>
-              <div className="flex items-center gap-4 text-slate-400 font-mono">
-                <span>{item.date}</span>
-                <span>{item.time}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${item.status === 'Approved' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                <span className={item.status === 'Approved' ? 'text-emerald-400' : 'text-amber-400'}>{item.status}</span>
-              </div>
-            </div>
-          ))}
+          {loadingUpcoming ? (
+            <div className="p-4 text-center text-slate-500">Loading your upcoming bookings...</div>
+          ) : upcomingBookings.length > 0 ? (
+            upcomingBookings.map((item) => {
+              const isApproved = item.status === 'APPROVED' || item.status === 'CONFIRMED';
+              const isRejected = item.status === 'REJECTED';
+
+              return (
+                <div key={item.id} className="flex items-center justify-between p-3.5 px-4 hover:bg-slate-900/80 transition-colors">
+                  <span className="font-medium text-slate-200">{item.lab}</span>
+                  <div className="flex items-center gap-4 text-slate-400 font-mono">
+                    <span>{item.date}</span>
+                    <span>{item.time}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isApproved ? 'bg-emerald-500' : isRejected ? 'bg-rose-500' : 'bg-amber-500'
+                      }`}
+                    />
+                    <span
+                      className={
+                        isApproved ? 'text-emerald-400' : isRejected ? 'text-rose-400' : 'text-amber-400'
+                      }
+                    >
+                      {item.status}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="p-4 text-center text-slate-500">No upcoming bookings found.</div>
+          )}
         </div>
       </div>
     </div>

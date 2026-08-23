@@ -1,14 +1,26 @@
+ 
+
 const cron = require('node-cron');
 const Booking = require('../models/Booking');
+const FacultyLabBooking = require('../models/Labbooking');
 const Resource = require('../models/Resource');
 const { getIO } = require('../socket');
 
-// Helper: Safely normalize any date input to "YYYY-MM-DD"
+// Helper: Safely normalize any date input to local "YYYY-MM-DD"
 function formatDateStr(dateInput) {
   if (!dateInput) return '';
-  if (dateInput instanceof Date) return dateInput.toISOString().split('T')[0];
-  if (typeof dateInput === 'string') return dateInput.split('T')[0].trim();
-  return String(dateInput);
+  
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateInput)) {
+    return dateInput.split('T')[0].trim();
+  }
+
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return String(dateInput).split('T')[0].trim();
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 // Helper: Parse slot end time safely into a valid JavaScript Date object
@@ -17,21 +29,32 @@ function getSlotEndTime(bookingDate, timeSlot) {
     const dateStr = formatDateStr(bookingDate);
     if (!dateStr) return null;
 
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const targetDate = new Date(year, month - 1, day);
+
     if (!timeSlot || typeof timeSlot !== 'string') {
-      return new Date(`${dateStr}T23:59:59`);
+      targetDate.setHours(23, 59, 59, 999);
+      return targetDate;
     }
 
-    // Extract end time portion (e.g., "12:00 PM" from "10:00 AM - 12:00 PM")
     const parts = timeSlot.split('-');
-    const endPart = parts.length > 1 ? parts[1].trim() : parts[0].trim();
+    const endPart = (parts.length > 1 ? parts[1] : parts[0]).trim();
 
-    const parsedDate = new Date(`${dateStr} ${endPart}`);
-    if (!isNaN(parsedDate.getTime())) {
-      return parsedDate;
+    const timeMatch = endPart.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!timeMatch) {
+      targetDate.setHours(23, 59, 59, 999);
+      return targetDate;
     }
 
-    // Fallback if slot parsing fails: end of the booking date
-    return new Date(`${dateStr}T23:59:59`);
+    let hours = parseInt(timeMatch[1], 10);
+    const minutes = parseInt(timeMatch[2], 10);
+    const modifier = timeMatch[3] ? timeMatch[3].toUpperCase() : null;
+
+    if (modifier === 'PM' && hours < 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+
+    targetDate.setHours(hours, minutes, 0, 0);
+    return targetDate;
   } catch (err) {
     return null;
   }
@@ -42,89 +65,135 @@ function initCronJobs() {
   cron.schedule('*/5 * * * *', async () => {
     try {
       const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
+      const todayStr = formatDateStr(now);
 
-      // 1. Case-insensitive status match
+      // ==========================================
+      // 1. PROCESS GENERAL RESOURCE BOOKINGS
+      // ==========================================
       const activeBookings = await Booking.find({
         status: { $in: ['Pending', 'pending', 'Approved', 'approved', 'Accepted', 'accepted'] },
       });
 
-      if (!activeBookings || activeBookings.length === 0) return;
+      if (activeBookings && activeBookings.length > 0) {
+        for (const booking of activeBookings) {
+          try {
+            const bookingDateStr = formatDateStr(booking.bookingDate);
+            const slotEndTime = getSlotEndTime(booking.bookingDate, booking.timeSlot);
 
-      for (const booking of activeBookings) {
-        try {
-          const bookingDateStr = formatDateStr(booking.bookingDate);
-          const slotEndTime = getSlotEndTime(booking.bookingDate, booking.timeSlot);
+            const isExpired =
+              (slotEndTime && slotEndTime < now) ||
+              (bookingDateStr && bookingDateStr < todayStr);
 
-          // Expiration check:
-          // 1. Slot end time is strictly before current timestamp
-          // 2. OR fallback: booking date is strictly earlier than today's date
-          const isExpired =
-            (slotEndTime && slotEndTime < now) ||
-            (bookingDateStr && bookingDateStr < todayStr);
+            if (isExpired) {
+              booking.status = 'Completed';
+              await booking.save();
 
-          if (isExpired) {
-            booking.status = 'Completed';
-            await booking.save();
+              // Release slot count on the Resource
+              if (booking.resource) {
+                const resource = await Resource.findById(booking.resource);
+                if (resource && Array.isArray(resource.slotBookings)) {
+                  const slotData = resource.slotBookings.find(
+                    (s) =>
+                      formatDateStr(s.date) === bookingDateStr &&
+                      String(s.timeSlot).trim() === String(booking.timeSlot).trim()
+                  );
 
-            // Release slot count on the Resource
-            if (booking.resource) {
-              const resource = await Resource.findById(booking.resource);
-              if (resource && Array.isArray(resource.slotBookings)) {
-                // Match slot safely using string normalization
-                const slotData = resource.slotBookings.find(
-                  (s) =>
-                    formatDateStr(s.date) === bookingDateStr &&
-                    String(s.timeSlot).trim() === String(booking.timeSlot).trim()
-                );
+                  if (slotData) {
+                    const releaseQty = booking.quantity || 1;
+                    slotData.bookedCount = Math.max(0, slotData.bookedCount - releaseQty);
+                    await resource.save();
 
-                if (slotData) {
-                  const releaseQty = booking.quantity || 1;
-                  slotData.bookedCount = Math.max(0, slotData.bookedCount - releaseQty);
-                  await resource.save();
+                    const updatedAvailable = resource.totalQuantity - slotData.bookedCount;
 
-                  const updatedAvailable = resource.totalQuantity - slotData.bookedCount;
-
-                  // Safely emit slot availability update
-                  try {
-                    const io = getIO();
-                    if (io) {
-                      io.emit('slot_availability_updated', {
-                        resourceId: resource._id,
-                        date: bookingDateStr,
-                        timeSlot: booking.timeSlot,
-                        availableCount: updatedAvailable,
-                      });
+                    try {
+                      const io = getIO();
+                      if (io) {
+                        io.emit('slot_availability_updated', {
+                          resourceId: resource._id,
+                          date: bookingDateStr,
+                          timeSlot: booking.timeSlot,
+                          availableCount: updatedAvailable,
+                        });
+                      }
+                    } catch (socketErr) {
+                      console.error('Socket emit error (slot_availability_updated):', socketErr.message);
                     }
-                  } catch (socketErr) {
-                    console.error('Socket emit error (slot_availability_updated):', socketErr.message);
                   }
                 }
               }
-            }
 
-            // Safely emit status update to user room
-            try {
-              const io = getIO();
-              if (io) {
-                const userIdStr = String(booking.user._id || booking.user);
-                io.to(`user_${userIdStr}`).emit('booking_status_changed', {
-                  _id: booking._id,
-                  status: 'Completed',
-                  bookingDate: booking.bookingDate,
-                  timeSlot: booking.timeSlot,
-                });
+              // Emit status update to user room
+              try {
+                const io = getIO();
+                if (io) {
+                  const userIdStr = String(booking.user._id || booking.user);
+                  io.to(`user_${userIdStr}`).emit('booking_status_changed', {
+                    _id: booking._id,
+                    status: 'Completed',
+                    bookingDate: booking.bookingDate,
+                    timeSlot: booking.timeSlot,
+                  });
+                }
+              } catch (socketErr) {
+                console.error('Socket emit error (booking_status_changed):', socketErr.message);
               }
-            } catch (socketErr) {
-              console.error('Socket emit error (booking_status_changed):', socketErr.message);
-            }
 
-            console.log(`⏰ [CRON] Booking ${booking._id} marked as Completed.`);
+              console.log(`⏰ [CRON] General Booking ${booking._id} marked as Completed.`);
+            }
+          } catch (bookingErr) {
+            console.error(`Error updating general booking ${booking._id}:`, bookingErr);
           }
-        } catch (bookingErr) {
-          console.error(`Error updating individual booking ${booking._id}:`, bookingErr);
         }
       }
+
+      // ==========================================
+      // 2. PROCESS FACULTY LAB BOOKINGS
+      // ==========================================
+      const activeLabBookings = await FacultyLabBooking.find({
+        status: { $in: ['Pending', 'pending', 'Approved', 'approved', 'Accepted', 'accepted'] },
+      });
+
+      if (activeLabBookings && activeLabBookings.length > 0) {
+        for (const labBooking of activeLabBookings) {
+          try {
+            // Support either 'bookingDate' or 'date' field naming
+            const dateVal = labBooking.bookingDate || labBooking.date;
+            const bookingDateStr = formatDateStr(dateVal);
+            const slotEndTime = getSlotEndTime(dateVal, labBooking.timeSlot);
+
+            const isExpired =
+              (slotEndTime && slotEndTime < now) ||
+              (bookingDateStr && bookingDateStr < todayStr);
+
+            if (isExpired) {
+              labBooking.status = 'Completed';
+              await labBooking.save();
+
+              try {
+                const io = getIO();
+                if (io) {
+                  const userIdStr = String(labBooking.user?._id || labBooking.user || labBooking.faculty?._id || labBooking.faculty);
+                  if (userIdStr) {
+                    io.to(`user_${userIdStr}`).emit('lab_booking_status_changed', {
+                      _id: labBooking._id,
+                      status: 'Completed',
+                      date: dateVal,
+                      timeSlot: labBooking.timeSlot,
+                    });
+                  }
+                }
+              } catch (socketErr) {
+                console.error('Socket emit error (lab_booking_status_changed):', socketErr.message);
+              }
+
+              console.log(`⏰ [CRON] Faculty Lab Booking ${labBooking._id} marked as Completed.`);
+            }
+          } catch (labBookingErr) {
+            console.error(`Error updating lab booking ${labBooking._id}:`, labBookingErr);
+          }
+        }
+      }
+
     } catch (error) {
       console.error('Cron job top-level error:', error);
     }

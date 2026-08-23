@@ -396,16 +396,7 @@ const MyBookings = () => {
                 )}
 
                 {/* Cancellation Action Button */}
-                {canCancel && (
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex justify-end">
-                    <button
-                      onClick={(e) => handleCancelBooking(e, bookingId)}
-                      className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-semibold transition-all"
-                    >
-                      Cancel Booking
-                    </button>
-                  </div>
-                )}
+               
               </div>
             );
           })}

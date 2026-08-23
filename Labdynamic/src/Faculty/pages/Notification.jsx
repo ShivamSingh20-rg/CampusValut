@@ -1,10 +1,56 @@
 import React, { useState, useMemo } from 'react';
 import { useSocket } from '../../context/SocketContext';
 
-export default function FacultyNotificationPage() {
+// Notification classification helpers
+const isRequestType = (item = {}) => {
+  const typeUpper = (item.type || '').toUpperCase();
+  const titleUpper = (item.title || '').toUpperCase();
+  const statusUpper = (item.status || '').toUpperCase();
+
+  return (
+    typeUpper.includes('REQUEST') ||
+    typeUpper.includes('BOOKING_PLACED') ||
+    typeUpper.includes('NEW_BOOKING') ||
+    typeUpper.includes('LAB_BOOKED') ||
+    typeUpper.includes('PENDING') ||
+    titleUpper.includes('NEW BOOKING') ||
+    titleUpper.includes('LAB BOOKED') ||
+    titleUpper.includes('REQUEST') ||
+    statusUpper === 'PENDING'
+  );
+};
+
+const isCanceledType = (item = {}) => {
+  const typeUpper = (item.type || '').toUpperCase();
+  const statusUpper = (item.status || '').toUpperCase();
+  const titleUpper = (item.title || '').toUpperCase();
+
+  return (
+    typeUpper.includes('CANCEL') ||
+    typeUpper.includes('REJECT') ||
+    statusUpper === 'CANCELLED' ||
+    statusUpper === 'REJECTED' ||
+    titleUpper.includes('REJECTED') ||
+    titleUpper.includes('CANCELLED')
+  );
+};
+
+const isApprovedType = (item = {}) => {
+  const typeUpper = (item.type || '').toUpperCase();
+  const statusUpper = (item.status || '').toUpperCase();
+  const titleUpper = (item.title || '').toUpperCase();
+
+  return (
+    typeUpper.includes('APPROV') ||
+    statusUpper === 'APPROVED' ||
+    titleUpper.includes('APPROVED')
+  );
+};
+
+export default function FacultyNotificationPage({ onAction }) {
   const {
-    notifications,
-    unreadCount,
+    notifications = [],
+    unreadCount = 0,
     markAsRead,
     markAllAsRead,
     clearNotifications,
@@ -14,43 +60,37 @@ export default function FacultyNotificationPage() {
   const [filter, setFilter] = useState('all'); // 'all' | 'unread' | 'requests'
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Manual trigger to sync notifications from backend
+  // Manual refresh with error handling
   const handleRefresh = async () => {
     if (!fetchNotifications) return;
     setIsRefreshing(true);
-    await fetchNotifications();
-    setTimeout(() => setIsRefreshing(false), 500);
+    try {
+      await fetchNotifications();
+    } catch (err) {
+      console.error('Failed to sync notifications:', err);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 400);
+    }
   };
 
-  // Filter logic tailored for Faculty
+  // Filter logic aligned with SocketContext property schemas
   const filteredNotifications = useMemo(() => {
     if (!Array.isArray(notifications)) return [];
 
     return notifications.filter((item) => {
       const isUnread = !item.read && !item.isRead;
-      const typeUpper = (item.type || '').toUpperCase();
-
       if (filter === 'unread') return isUnread;
-      if (filter === 'requests') {
-        return (
-          typeUpper.includes('REQUEST') ||
-          typeUpper.includes('BOOKING_PLACED') ||
-          typeUpper.includes('PENDING')
-        );
-      }
+      if (filter === 'requests') return isRequestType(item);
       return true;
     });
   }, [notifications, filter]);
 
-  // Helper for formatting time
   const formatTime = (dateString) => {
     if (!dateString) return 'Just now';
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return 'Just now';
 
-    const now = new Date();
-    const diffInSeconds = Math.floor((now - date) / 1000);
-
+    const diffInSeconds = Math.floor((new Date() - date) / 1000);
     if (diffInSeconds < 60) return 'Just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
@@ -64,7 +104,7 @@ export default function FacultyNotificationPage() {
 
   return (
     <div className="max-w-3xl mx-auto p-6 bg-slate-950 text-slate-100 min-h-screen">
-      {/* Header */}
+      {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800 mb-6">
         <div>
           <div className="flex items-center gap-3">
@@ -81,12 +121,11 @@ export default function FacultyNotificationPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          {/* Refresh Button */}
           {fetchNotifications && (
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition-all"
+              className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition-all disabled:opacity-50"
               title="Refresh Notifications"
             >
               <svg
@@ -105,7 +144,6 @@ export default function FacultyNotificationPage() {
             </button>
           )}
 
-          {/* Mark All as Read Button */}
           {unreadCount > 0 && (
             <button
               onClick={markAllAsRead}
@@ -115,7 +153,6 @@ export default function FacultyNotificationPage() {
             </button>
           )}
 
-          {/* Clear All Button */}
           {notifications.length > 0 && (
             <button
               onClick={() => {
@@ -129,14 +166,12 @@ export default function FacultyNotificationPage() {
             </button>
           )}
 
-          {/* Filter Controls */}
+          {/* Tab Filters */}
           <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
             <button
               onClick={() => setFilter('all')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                filter === 'all'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                filter === 'all' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               All ({notifications.length})
@@ -144,9 +179,7 @@ export default function FacultyNotificationPage() {
             <button
               onClick={() => setFilter('unread')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                filter === 'unread'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                filter === 'unread' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               Unread ({unreadCount})
@@ -154,9 +187,7 @@ export default function FacultyNotificationPage() {
             <button
               onClick={() => setFilter('requests')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                filter === 'requests'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                filter === 'requests' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               Requests
@@ -165,47 +196,26 @@ export default function FacultyNotificationPage() {
         </div>
       </div>
 
-      {/* List Section */}
+      {/* Notifications Render List */}
       <div className="space-y-3">
         {filteredNotifications.length > 0 ? (
           filteredNotifications.map((item, index) => {
-            const isRead = item.read || item.isRead;
+            const isRead = Boolean(item.read || item.isRead);
             const notificationId = item._id || item.id;
 
-            // Normalized status checks
-            const statusUpper = (item.status || '').toUpperCase();
-            const typeUpper = (item.type || '').toUpperCase();
-            const titleUpper = (item.title || '').toUpperCase();
+            const isPending = isRequestType(item);
+            const isCanceled = isCanceledType(item);
+            const isApproved = isApprovedType(item);
 
-            const isPendingRequest =
-              typeUpper.includes('BOOKING_PLACED') ||
-              typeUpper.includes('NEW_BOOKING') ||
-              titleUpper.includes('NEW BOOKING') ||
-              titleUpper.includes('REQUEST');
-
-            const isCanceledOrRejected =
-              typeUpper.includes('CANCEL') ||
-              typeUpper.includes('REJECT') ||
-              statusUpper === 'CANCELLED' ||
-              statusUpper === 'REJECTED' ||
-              titleUpper.includes('REJECTED') ||
-              titleUpper.includes('CANCELLED');
-
-            const isApproved =
-              typeUpper.includes('APPROV') ||
-              statusUpper === 'APPROVED' ||
-              titleUpper.includes('APPROVED');
-
-            // Card Style Variants matching dark slate theme
             let cardStyle = 'bg-slate-900/60 border-slate-800 hover:border-slate-700';
             let statusIcon = '🔔';
             let badgeTag = null;
 
-            if (isPendingRequest) {
+            if (isPending) {
               cardStyle = 'bg-amber-950/20 border-amber-900/40 hover:border-amber-700/60';
               statusIcon = '⏳';
               badgeTag = { text: 'Action Needed', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
-            } else if (isCanceledOrRejected) {
+            } else if (isCanceled) {
               cardStyle = 'bg-rose-950/20 border-rose-900/40 hover:border-rose-700/60';
               statusIcon = '🚫';
               badgeTag = { text: 'Rejected / Canceled', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20' };
@@ -239,16 +249,31 @@ export default function FacultyNotificationPage() {
                         )}
 
                         {!isRead && (
-                          <span
-                            className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"
-                            title="Unread"
-                          ></span>
+                          <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" title="Unread" />
                         )}
                       </div>
 
                       <p className="text-xs text-slate-300 mt-1 leading-relaxed">
                         {item.message}
                       </p>
+
+                      {/* Direct Action Handler for Pending Requests */}
+                      {isPending && onAction && (
+                        <div className="flex items-center gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => onAction('APPROVE', item)}
+                            className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-md transition-colors"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => onAction('REJECT', item)}
+                            className="px-2.5 py-1 text-[11px] font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 rounded-md transition-colors"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 

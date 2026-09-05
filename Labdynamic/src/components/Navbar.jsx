@@ -28,7 +28,7 @@ export default function Navbar({ user: propUser, handleLogout: propLogout, onSea
           L
         </div>
         <span className="font-extrabold text-lg text-gray-100 tracking-tight">
-          LabDynamix
+          CapusVault
         </span>
       </div>
 

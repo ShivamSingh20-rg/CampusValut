@@ -1,11 +1,11 @@
-# Labdynamix – Real-Time Lab Resource Scheduling Platform
+# CampusValut – Real-Time Campus Resources Scheduling Platform
 
 [![Tech Stack](https://img.shields.io/badge/Stack-MERN-blue.svg)](https://react.dev/)
 [![Real-Time](https://img.shields.io/badge/WebSockets-Socket.IO-black.svg)](https://socket.io/)
 [![Styling](https://img.shields.io/badge/UI-Tailwind_CSS-38B2AC.svg)](https://tailwindcss.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Labdynamix** is a full-stack MERN web application designed to automate, streamline, and modernize laboratory resource management and slot scheduling. By replacing legacy, manual booking systems, Labdynamix eliminates scheduling collisions through automated conflict detection, centralized resource management, and real-time status updates powered by WebSockets.
+**CampusVault** is a full-stack MERN web application designed to automate, streamline, and modernize laboratory resource and campus  resource  management and slot scheduling. By replacing legacy, manual booking systems, CampusVault eliminates scheduling collisions through automated conflict detection, centralized resource management, and real-time status updates powered by WebSockets.
 
 ---
 
